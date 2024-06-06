@@ -1,12 +1,12 @@
 [package]
-name = "bip300_messages"
+name = "bip300301_messages"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitcoin = "0.31.1"
+bitcoin = { version = "0.30", features = ["serde"] }
 byteorder = "1.5.0"
 miette = "5.10.0"
 nom = "7.1.3"

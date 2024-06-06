@@ -1,7 +1,7 @@
-use bitcoin::opcodes::all::{OP_NOP5, OP_RETURN};
-use bitcoin::{Amount, Opcode, Script, ScriptBuf, TxOut};
+use bitcoin::opcodes::all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN};
+use bitcoin::opcodes::OP_TRUE;
+use bitcoin::{opcodes::All, Script, ScriptBuf, TxOut};
 use byteorder::{ByteOrder, LittleEndian};
-use miette::{miette, IntoDiagnostic, Result};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::combinator::fail;
@@ -10,7 +10,9 @@ use nom::multi::many0;
 use nom::IResult;
 use sha2::{Digest, Sha256};
 
-pub const OP_DRIVECHAIN: Opcode = OP_NOP5;
+pub use bitcoin;
+
+pub const OP_DRIVECHAIN: All = OP_NOP5;
 
 pub struct CoinbaseBuilder {
     messages: Vec<CoinbaseMessage>,
@@ -25,7 +27,7 @@ impl CoinbaseBuilder {
         self.messages
             .into_iter()
             .map(|message| TxOut {
-                value: Amount::from_sat(0),
+                value: 0,
                 script_pubkey: message.into(),
             })
             .collect()
@@ -63,6 +65,12 @@ impl CoinbaseBuilder {
         self.messages.push(message);
         self
     }
+
+    pub fn op_drivechain(mut self, sidechain_number: u8) -> Self {
+        let message = CoinbaseMessage::OpDrivechain { sidechain_number };
+        self.messages.push(message);
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -80,6 +88,9 @@ pub enum CoinbaseMessage {
         bundle_txid: [u8; 32],
     },
     M4AckBundles(M4AckBundles),
+    OpDrivechain {
+        sidechain_number: u8,
+    },
 }
 
 const M1_PROPOSE_SIDECHAIN_TAG: &[u8] = &[0xD5, 0xE0, 0xC4, 0xAF];
@@ -127,6 +138,9 @@ impl M4AckBundles {
 
 pub fn parse_coinbase_script<'a>(script: &'a Script) -> IResult<&'a [u8], CoinbaseMessage> {
     let script = script.as_bytes();
+    if let Ok((input, sidechain_number)) = parse_op_drivechain(script) {
+        return Ok((input, CoinbaseMessage::OpDrivechain { sidechain_number }));
+    }
     let (input, _) = tag(&[OP_RETURN.to_u8()])(script)?;
     let (input, message_tag) = alt((
         tag(M1_PROPOSE_SIDECHAIN_TAG),
@@ -144,6 +158,15 @@ pub fn parse_coinbase_script<'a>(script: &'a Script) -> IResult<&'a [u8], Coinba
         return parse_m4_ack_bundles(input);
     }
     fail(input)
+}
+
+pub fn parse_op_drivechain(input: &[u8]) -> IResult<&[u8], u8> {
+    let (input, op_drivechain_tag) = tag(&[OP_DRIVECHAIN.to_u8(), OP_PUSHBYTES_1.to_u8()])(input)?;
+    dbg!(&op_drivechain_tag);
+    let (input, sidechain_number) = take(1usize)(input)?;
+    let sidechain_number = sidechain_number[0];
+    tag(&[OP_TRUE.to_u8()])(input)?;
+    return Ok((input, sidechain_number));
 }
 
 fn parse_m1_propose_sidechain(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
@@ -216,6 +239,17 @@ fn parse_m4_ack_bundles(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
 impl Into<ScriptBuf> for CoinbaseMessage {
     fn into(self) -> ScriptBuf {
         match self {
+            Self::OpDrivechain { sidechain_number } => {
+                let message = [
+                    OP_DRIVECHAIN.to_u8(),
+                    OP_PUSHBYTES_1.to_u8(),
+                    sidechain_number,
+                    OP_TRUE.to_u8(),
+                ];
+                let script_pubkey = ScriptBuf::from_bytes(message.into());
+                dbg!(&script_pubkey);
+                return script_pubkey;
+            }
             Self::M1ProposeSidechain {
                 sidechain_number,
                 data,
