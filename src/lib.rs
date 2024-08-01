@@ -1,7 +1,7 @@
 use bitcoin::opcodes::all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN};
 use bitcoin::opcodes::OP_TRUE;
 use bitcoin::{opcodes::All, Script, ScriptBuf, TxOut};
-use byteorder::{ByteOrder, LittleEndian};
+use byteorder::{ByteOrder, BigEndian};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::combinator::fail;
@@ -225,7 +225,7 @@ fn parse_m4_ack_bundles(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
         let (input, upvotes) = many0(take(2usize))(input)?;
         let upvotes: Vec<u16> = upvotes
             .into_iter()
-            .map(|upvote| LittleEndian::read_u16(upvote))
+            .map(|upvote| BigEndian::read_u16(upvote))
             .collect();
         let message = CoinbaseMessage::M4AckBundles(M4AckBundles::TwoBytes { upvotes });
         return Ok((input, message));
@@ -297,7 +297,7 @@ impl Into<ScriptBuf> for CoinbaseMessage {
                     M4AckBundles::OneByte { upvotes } => upvotes.clone(),
                     M4AckBundles::TwoBytes { upvotes } => upvotes
                         .iter()
-                        .flat_map(|upvote| upvote.to_le_bytes())
+                        .flat_map(|upvote| upvote.to_be_bytes())
                         .collect(),
                     _ => vec![],
                 };
@@ -318,14 +318,8 @@ impl Into<ScriptBuf> for CoinbaseMessage {
 pub fn sha256d(data: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    let data_hash: [u8; 32] = hasher.finalize_reset().into();
-    hasher.update(data_hash);
-    let data_hash: [u8; 32] = hasher.finalize().into();
-    data_hash
+    let data_sha256_hash: [u8; 32] = hasher.finalize_reset().into();
+    hasher.update(data_sha256_hash);
+    let data_sha256d_hash: [u8; 32] = hasher.finalize().into();
+    data_sha256d_hash
 }
-
-// Move all non-consensus components out of Bitcoin Core.
-// Over time *delete* all of that code.
-// Simplify everything.
-//
-// AKM not H&K G11.
