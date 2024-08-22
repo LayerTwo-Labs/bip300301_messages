@@ -1,3 +1,4 @@
+use bitcoin::hashes::Hash;
 use bitcoin::opcodes::all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN};
 use bitcoin::opcodes::OP_TRUE;
 use bitcoin::{opcodes::All, Script, ScriptBuf, TxOut};
@@ -302,7 +303,7 @@ pub fn sha256d(data: &[u8]) -> [u8; 32] {
     data_sha256d_hash
 }
 
-pub fn m6_to_id(m6: &Transaction, previous_treasury_utxo_total: u64) -> Txid {
+pub fn m6_to_id(m6: &Transaction, previous_treasury_utxo_total: u64) -> [u8; 32] {
     let mut m6 = m6.clone();
     /*
     1. Remove the single input spending the previous treasury UTXO from the `vin`
@@ -346,5 +347,5 @@ pub fn m6_to_id(m6: &Transaction, previous_treasury_utxo_total: u64) -> Txid {
     At this point we have constructed `M6_blinded`.
         */
     let m6_blinded = m6;
-    m6_blinded.txid()
+    m6_blinded.txid().to_byte_array()
 }
