@@ -84,12 +84,23 @@ pub enum CoinbaseMessage {
         bundle_txid: [u8; 32],
     },
     M4AckBundles(M4AckBundles),
+    M7BmmAccept {
+        sidechain_block_hash: [u8; 32],
+    },
+}
+
+#[derive(Debug)]
+pub struct M8BmmRequest {
+    sidechain_block_hash: [u8; 32],
+    prev_mainchain_block_hash: [u8; 32],
 }
 
 const M1_PROPOSE_SIDECHAIN_TAG: &[u8] = &[0xD5, 0xE0, 0xC4, 0xAF];
 const M2_ACK_SIDECHAIN_TAG: &[u8] = &[0xD6, 0xE1, 0xC5, 0xDF];
 const M3_PROPOSE_BUNDLE_TAG: &[u8] = &[0xD4, 0x5A, 0xA9, 0x43];
 const M4_ACK_BUNDLES_TAG: &[u8] = &[0xD7, 0x7D, 0x17, 0x76];
+const M7_BMM_ACCEPT_TAG: &[u8] = &[0xD1, 0x61, 0x73, 0x68];
+const M8_BMM_REQUEST_TAG: &[u8] = &[0x00, 0xBF, 0x00];
 
 pub const ABSTAIN_ONE_BYTE: u8 = 0xFF;
 pub const ABSTAIN_TWO_BYTES: u16 = 0xFFFF;
@@ -146,6 +157,8 @@ pub fn parse_coinbase_script<'a>(script: &'a Script) -> IResult<&'a [u8], Coinba
         return parse_m3_propose_bundle(input);
     } else if message_tag == M4_ACK_BUNDLES_TAG {
         return parse_m4_ack_bundles(input);
+    } else if message_tag == M7_BMM_ACCEPT_TAG {
+        return parse_m7_bmm_accept(input);
     }
     fail(input)
 }
@@ -226,6 +239,31 @@ fn parse_m4_ack_bundles(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
     return fail(input);
 }
 
+fn parse_m7_bmm_accept(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
+    let (input, sidechain_block_hash) = take(32usize)(input)?;
+    // Unwrap here is fine, because if we didn't get exactly 32 bytes we'd fail on the previous
+    // line.
+    let sidechain_block_hash = sidechain_block_hash.try_into().unwrap();
+    let message = CoinbaseMessage::M7BmmAccept {
+        sidechain_block_hash,
+    };
+    Ok((input, message))
+}
+
+fn parse_m8_bmm_request(input: &[u8]) -> IResult<&[u8], M8BmmRequest> {
+    let (input, _) = tag(&[OP_RETURN.to_u8()])(input)?;
+    let (input, _) = tag(M8_BMM_REQUEST_TAG)(input)?;
+    let (input, sidechain_block_hash) = take(32usize)(input)?;
+    let (input, prev_mainchain_block_hash) = take(32usize)(input)?;
+    let sidechain_block_hash = sidechain_block_hash.try_into().unwrap();
+    let prev_mainchain_block_hash = prev_mainchain_block_hash.try_into().unwrap();
+    let message = M8BmmRequest {
+        sidechain_block_hash,
+        prev_mainchain_block_hash,
+    };
+    return Ok((input, message));
+}
+
 impl Into<ScriptBuf> for CoinbaseMessage {
     fn into(self) -> ScriptBuf {
         match self {
@@ -285,6 +323,18 @@ impl Into<ScriptBuf> for CoinbaseMessage {
                     M4_ACK_BUNDLES_TAG,
                     &[m4_ack_bundles.tag()],
                     &upvotes,
+                ]
+                .concat();
+                let script_pubkey = ScriptBuf::from_bytes(message);
+                return script_pubkey;
+            }
+            Self::M7BmmAccept {
+                sidechain_block_hash,
+            } => {
+                let message = [
+                    &[OP_RETURN.to_u8()],
+                    M7_BMM_ACCEPT_TAG,
+                    &sidechain_block_hash,
                 ]
                 .concat();
                 let script_pubkey = ScriptBuf::from_bytes(message);
