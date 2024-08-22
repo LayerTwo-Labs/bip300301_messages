@@ -91,8 +91,8 @@ pub enum CoinbaseMessage {
 
 #[derive(Debug)]
 pub struct M8BmmRequest {
-    sidechain_block_hash: [u8; 32],
-    prev_mainchain_block_hash: [u8; 32],
+    pub sidechain_block_hash: [u8; 32],
+    pub prev_mainchain_block_hash: [u8; 32],
 }
 
 const M1_PROPOSE_SIDECHAIN_TAG: &[u8] = &[0xD5, 0xE0, 0xC4, 0xAF];
