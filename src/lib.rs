@@ -250,7 +250,7 @@ fn parse_m7_bmm_accept(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
     Ok((input, message))
 }
 
-fn parse_m8_bmm_request(input: &[u8]) -> IResult<&[u8], M8BmmRequest> {
+pub fn parse_m8_bmm_request(input: &[u8]) -> IResult<&[u8], M8BmmRequest> {
     let (input, _) = tag(&[OP_RETURN.to_u8()])(input)?;
     let (input, _) = tag(M8_BMM_REQUEST_TAG)(input)?;
     let (input, sidechain_block_hash) = take(32usize)(input)?;
