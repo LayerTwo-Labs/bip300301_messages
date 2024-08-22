@@ -1,7 +1,8 @@
 use bitcoin::opcodes::all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN};
 use bitcoin::opcodes::OP_TRUE;
 use bitcoin::{opcodes::All, Script, ScriptBuf, TxOut};
-use byteorder::{ByteOrder, BigEndian};
+use bitcoin::{Transaction, Txid};
+use byteorder::{BigEndian, ByteOrder};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::combinator::fail;
@@ -299,4 +300,51 @@ pub fn sha256d(data: &[u8]) -> [u8; 32] {
     hasher.update(data_sha256_hash);
     let data_sha256d_hash: [u8; 32] = hasher.finalize().into();
     data_sha256d_hash
+}
+
+pub fn m6_to_id(m6: &Transaction, previous_treasury_utxo_total: u64) -> Txid {
+    let mut m6 = m6.clone();
+    /*
+    1. Remove the single input spending the previous treasury UTXO from the `vin`
+       vector, so that the `vin` vector is empty.
+            */
+    m6.input.clear();
+    /*
+    2. Compute `P_total` by summing the `nValue`s of all pay out outputs in this
+       `M6`, so `P_total` = sum of `nValue`s of all outputs of this `M6` except for
+       the new treasury UTXO at index 0.
+            */
+    let p_total: u64 = m6.output[1..].iter().map(|o| o.value).sum();
+    /*
+    3. Set `T_n` equal to the `nValue` of the treasury UTXO created in this `M6`.
+        */
+    let t_n = m6.output[0].value;
+    /*
+    4. Compute `F_total = T_n-1 - T_n - P_total`, since we know that `T_n = T_n-1 -
+       P_total - F_total`, `T_n-1` was passed as an argument, and `T_n` and
+       `P_total` were computed in previous steps..
+        */
+    let t_n_minus_1 = previous_treasury_utxo_total;
+    let f_total = t_n_minus_1 - t_n - p_total;
+    /*
+    5. Encode `F_total` as `F_total_be_bytes`, an array of 8 bytes encoding the 64
+       bit unsigned integer in big endian order.
+        */
+    let f_total_be_bytes = f_total.to_be_bytes();
+    /*
+    6. Push an output to the end of `vout` of this `M6` with the `nValue = 0` and
+       `scriptPubKey = OP_RETURN F_total_be_bytes`.
+        */
+    let script_bytes = [vec![OP_RETURN.to_u8()], f_total_be_bytes.to_vec()].concat();
+    let script_pubkey = ScriptBuf::from_bytes(script_bytes);
+    let txout = TxOut {
+        script_pubkey,
+        value: 0,
+    };
+    m6.output.push(txout);
+    /*
+    At this point we have constructed `M6_blinded`.
+        */
+    let m6_blinded = m6;
+    m6_blinded.txid()
 }
