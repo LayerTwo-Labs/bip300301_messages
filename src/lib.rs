@@ -68,8 +68,9 @@ impl CoinbaseBuilder {
         self
     }
 
-    pub fn bmm_accept(mut self, bmm_hash: &[u8; 32]) -> Self {
+    pub fn bmm_accept(mut self, sidechain_number: u8, bmm_hash: &[u8; 32]) -> Self {
         let message = CoinbaseMessage::M7BmmAccept {
+            sidechain_number,
             sidechain_block_hash: *bmm_hash,
         };
         self.messages.push(message);
@@ -93,12 +94,14 @@ pub enum CoinbaseMessage {
     },
     M4AckBundles(M4AckBundles),
     M7BmmAccept {
+        sidechain_number: u8,
         sidechain_block_hash: [u8; 32],
     },
 }
 
 #[derive(Debug)]
 pub struct M8BmmRequest {
+    pub sidechain_number: u8,
     pub sidechain_block_hash: [u8; 32],
     pub prev_mainchain_block_hash: [u8; 32],
 }
@@ -248,11 +251,14 @@ fn parse_m4_ack_bundles(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
 }
 
 fn parse_m7_bmm_accept(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
+    let (input, sidechain_number) = take(1usize)(input)?;
+    let sidechain_number = sidechain_number[0];
     let (input, sidechain_block_hash) = take(32usize)(input)?;
     // Unwrap here is fine, because if we didn't get exactly 32 bytes we'd fail on the previous
     // line.
     let sidechain_block_hash = sidechain_block_hash.try_into().unwrap();
     let message = CoinbaseMessage::M7BmmAccept {
+        sidechain_number,
         sidechain_block_hash,
     };
     Ok((input, message))
@@ -261,11 +267,14 @@ fn parse_m7_bmm_accept(input: &[u8]) -> IResult<&[u8], CoinbaseMessage> {
 pub fn parse_m8_bmm_request(input: &[u8]) -> IResult<&[u8], M8BmmRequest> {
     let (input, _) = tag(&[OP_RETURN.to_u8()])(input)?;
     let (input, _) = tag(M8_BMM_REQUEST_TAG)(input)?;
+    let (input, sidechain_number) = take(1usize)(input)?;
+    let sidechain_number = sidechain_number[0];
     let (input, sidechain_block_hash) = take(32usize)(input)?;
     let (input, prev_mainchain_block_hash) = take(32usize)(input)?;
     let sidechain_block_hash = sidechain_block_hash.try_into().unwrap();
     let prev_mainchain_block_hash = prev_mainchain_block_hash.try_into().unwrap();
     let message = M8BmmRequest {
+        sidechain_number,
         sidechain_block_hash,
         prev_mainchain_block_hash,
     };
@@ -337,11 +346,13 @@ impl Into<ScriptBuf> for CoinbaseMessage {
                 return script_pubkey;
             }
             Self::M7BmmAccept {
+                sidechain_number,
                 sidechain_block_hash,
             } => {
                 let message = [
                     &[OP_RETURN.to_u8()],
                     M7_BMM_ACCEPT_TAG,
+                    &[sidechain_number],
                     &sidechain_block_hash,
                 ]
                 .concat();
