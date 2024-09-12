@@ -175,8 +175,7 @@ pub fn parse_coinbase_script<'a>(script: &'a Script) -> IResult<&'a [u8], Coinba
 }
 
 pub fn parse_op_drivechain(input: &[u8]) -> IResult<&[u8], u8> {
-    let (input, op_drivechain_tag) = tag(&[OP_DRIVECHAIN.to_u8(), OP_PUSHBYTES_1.to_u8()])(input)?;
-    dbg!(&op_drivechain_tag);
+    let (input, _op_drivechain_tag) = tag(&[OP_DRIVECHAIN.to_u8(), OP_PUSHBYTES_1.to_u8()])(input)?;
     let (input, sidechain_number) = take(1usize)(input)?;
     let sidechain_number = sidechain_number[0];
     tag(&[OP_TRUE.to_u8()])(input)?;
