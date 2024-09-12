@@ -1,8 +1,8 @@
 use bitcoin::hashes::Hash;
 use bitcoin::opcodes::all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN};
 use bitcoin::opcodes::OP_TRUE;
+use bitcoin::Transaction;
 use bitcoin::{opcodes::All, Script, ScriptBuf, TxOut};
-use bitcoin::{Transaction, Txid};
 use byteorder::{BigEndian, ByteOrder};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
