@@ -1,20 +1,24 @@
-use bitcoin::hashes::Hash;
-use bitcoin::opcodes::all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN};
-use bitcoin::opcodes::OP_TRUE;
-use bitcoin::Transaction;
-use bitcoin::{opcodes::All, Script, ScriptBuf, TxOut};
+use bitcoin::{
+    hashes::Hash,
+    opcodes::{
+        all::{OP_NOP5, OP_PUSHBYTES_1, OP_RETURN},
+        OP_TRUE,
+    },
+    Amount, Opcode, Script, ScriptBuf, Transaction, TxOut,
+};
 use byteorder::{BigEndian, ByteOrder};
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take};
-use nom::combinator::fail;
-use nom::combinator::rest;
-use nom::multi::many0;
-use nom::IResult;
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take},
+    combinator::{fail, rest},
+    multi::many0,
+    IResult,
+};
 use sha2::{Digest, Sha256};
 
 pub use bitcoin;
 
-pub const OP_DRIVECHAIN: All = OP_NOP5;
+pub const OP_DRIVECHAIN: Opcode = OP_NOP5;
 
 pub struct CoinbaseBuilder {
     messages: Vec<CoinbaseMessage>,
@@ -29,7 +33,7 @@ impl CoinbaseBuilder {
         self.messages
             .into_iter()
             .map(|message| TxOut {
-                value: 0,
+                value: Amount::ZERO,
                 script_pubkey: message.into(),
             })
             .collect()
@@ -383,18 +387,18 @@ pub fn m6_to_id(m6: &Transaction, previous_treasury_utxo_total: u64) -> [u8; 32]
        `M6`, so `P_total` = sum of `nValue`s of all outputs of this `M6` except for
        the new treasury UTXO at index 0.
             */
-    let p_total: u64 = m6.output[1..].iter().map(|o| o.value).sum();
+    let p_total: Amount = m6.output[1..].iter().map(|o| o.value).sum();
     /*
     3. Set `T_n` equal to the `nValue` of the treasury UTXO created in this `M6`.
         */
-    let t_n = m6.output[0].value;
+    let t_n = m6.output[0].value.to_sat();
     /*
     4. Compute `F_total = T_n-1 - T_n - P_total`, since we know that `T_n = T_n-1 -
        P_total - F_total`, `T_n-1` was passed as an argument, and `T_n` and
        `P_total` were computed in previous steps..
         */
     let t_n_minus_1 = previous_treasury_utxo_total;
-    let f_total = t_n_minus_1 - t_n - p_total;
+    let f_total = t_n_minus_1 - t_n - p_total.to_sat();
     /*
     5. Encode `F_total` as `F_total_be_bytes`, an array of 8 bytes encoding the 64
        bit unsigned integer in big endian order.
@@ -408,12 +412,12 @@ pub fn m6_to_id(m6: &Transaction, previous_treasury_utxo_total: u64) -> [u8; 32]
     let script_pubkey = ScriptBuf::from_bytes(script_bytes);
     let txout = TxOut {
         script_pubkey,
-        value: 0,
+        value: Amount::ZERO,
     };
     m6.output.push(txout);
     /*
     At this point we have constructed `M6_blinded`.
         */
     let m6_blinded = m6;
-    m6_blinded.txid().to_byte_array()
+    m6_blinded.compute_txid().to_byte_array()
 }
